@@ -1,0 +1,53 @@
+version: "3.5"
+
+services:
+  rabbitmq:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - my_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:15672"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  simulator:
+    build:
+      dockerfile: Dockerfile
+      context: ./pv-simulator-consumer
+    volumes:
+      - ./pv-simulator-consumer/output/:/app/output/
+    environment:
+      # we can other env variables here and not use .env while running app part of docker container
+      RABBITMQ_DEFAULT_HOST: amqp://guest:guest@rabbitmq/
+      OUTPUT_FILE_PATH: ./output/PV_result.csv
+    links:
+      - rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - my_network
+
+  meter:
+    build:
+      dockerfile: Dockerfile
+      context: ./meter-producer
+    environment:
+      RABBITMQ_DEFAULT_HOST: amqp://guest:guest@rabbitmq/
+    restart: on-failure
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - my_network
+
+
+networks:
+  my_network:
+    driver: bridge
